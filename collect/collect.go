@@ -31,7 +31,7 @@ type Sheet struct {
 	start string  // start coordinates value for search
 	row, col int  // row and col index now
 	file *excelize.File
-	data map[int][]string  // row, col_data
+	data [][]string  // each col data of each row
 	month string
 	typeIndex int
 }
@@ -128,7 +128,7 @@ func (s *Sheet) ReadSheet() error {
 				} else if (colsData == nil) || (len(colsData[0]) == 0) || (len(colsData) > moneyIndex && len(colsData[moneyIndex]) == 0) {
 					break
 				}
-				s.data[curRow] = colsData
+				s.data = append(s.data, colsData)
 			}
 		}
 	}
@@ -180,7 +180,7 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 		} else if strings.Contains(colsData[from.typeIndex], "视频") {
 			dstAxis, _ := excelize.CoordinatesToCellName(7, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
-		} else if strings.Contains(colsData[from.typeIndex], "文", ) {
+		} else if strings.Contains(colsData[from.typeIndex], "文") {
 			dstAxis, _ := excelize.CoordinatesToCellName(8, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
 		}
@@ -220,7 +220,6 @@ func (c *Collect) Run() {
 			name: "内容创作者",
 			start: "运营部门",
 			file: f,
-			data: make(map[int][]string),
 			month: monthRes,
 			typeIndex: 0,
 		})
@@ -231,7 +230,6 @@ func (c *Collect) Run() {
 		row: 1,
 		col: 1,
 		file: c.DstFiles["collect.xlsx"],
-		data: make(map[int][]string),
 	}
 
 	for _, sheet := range sheets {
