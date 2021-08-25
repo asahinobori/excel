@@ -1,0 +1,8 @@
+src/
+dst/
+deploy/
+*.sum
+*.exe
+*.idea/
+*.o
+*.a
