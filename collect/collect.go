@@ -2,10 +2,14 @@ package collect
 
 import (
 	"fmt"
+	"github.com/dimchansky/utfbom"
+	"github.com/gocarina/gocsv"
 	"github.com/xuri/excelize/v2"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -19,11 +23,13 @@ var collectMap  = map[int]int {
 	6 : 6,
 }
 
+const orgIndex = 4
 const moneyIndex = 9
 
 type Collect struct {
 	srcDir, dstDir string
-	SrcFiles, DstFiles map[string]*excelize.File  // file_name, fd
+	srcFiles, dstFiles map[string]*excelize.File  // file_name, fd
+	srcCsvFiles map[string]*os.File
 }
 
 type Sheet struct {
@@ -34,6 +40,13 @@ type Sheet struct {
 	data [][]string  // each col data of each row
 	month string
 	typeIndex int
+	org map[string]string  // uid, org
+}
+
+type Org struct {
+	KolType string `csv:"kol_type"`
+	Uid string `csv:"uid"`
+	AddDate string `csv:"add_date"`
 }
 
 func NewCollect(args ...string) *Collect {
@@ -49,12 +62,13 @@ func NewCollect(args ...string) *Collect {
 	return &Collect {
 		srcDir: srcDirSet,
 		dstDir: dstDirSet,
-		SrcFiles: make(map[string]*excelize.File),
-		DstFiles: make(map[string]*excelize.File),
+		srcFiles: make(map[string]*excelize.File),
+		dstFiles: make(map[string]*excelize.File),
+		srcCsvFiles: make(map[string]*os.File),
 	}
 }
 
-func (c *Collect) LoadSrcExcels() error {
+func (c *Collect) LoadSrcFiles() error {
 	files, err := os.ReadDir(c.srcDir)
 	if err != nil {
 		return err
@@ -65,15 +79,21 @@ func (c *Collect) LoadSrcExcels() error {
 			if err != nil {
 				return err
 			}
-			c.SrcFiles[file.Name()] = f
+			c.srcFiles[file.Name()] = f
 			// fmt.Println("successfully load", file.Name())
+		} else if strings.HasSuffix(file.Name(), "csv") {
+			f, err := os.OpenFile(c.srcDir + "/" + file.Name(), os.O_RDWR, os.ModePerm)
+			if err != nil {
+				panic(err)
+			}
+			c.srcCsvFiles[file.Name()] = f
 		}
 	}
 
 	return nil
 }
 
-func (c *Collect) CreateDstExcel(filename string) error {
+func (c *Collect) CreateDstFile(filename string) error {
 	f := excelize.NewFile()
 	s, err := os.Stat(filepath.Dir(c.dstDir + "/" + filename))
 	if err != nil && os.IsNotExist(err) {
@@ -90,7 +110,40 @@ func (c *Collect) CreateDstExcel(filename string) error {
 	if err := f.SaveAs(c.dstDir + "/" + filename); err != nil {
 		return err
 	}
-	c.DstFiles[filename] = f
+	c.dstFiles[filename] = f
+	return nil
+}
+
+func (c *Collect) ReadCSV(orgsMap map[string]string) error {
+	orgs := make([]*Org, 0)
+	orgMap := make(map[string]int)
+	for _, f := range c.srcCsvFiles {
+		csvContent, err := ioutil.ReadAll(utfbom.SkipOnly(f))
+		if err != nil {
+			return err
+		}
+		if err := gocsv.UnmarshalBytes(csvContent, &orgs); err != nil {
+			return err
+		}
+		for id, org := range orgs {
+			if orgsId, exist := orgMap[org.Uid]; exist {
+				if strings.Contains(orgs[orgsId].KolType, "其他") && !strings.Contains(org.KolType, "其他") {
+					orgMap[org.Uid] = id
+					orgsMap[org.Uid] = org.KolType
+				} else if newDate, err :=strconv.Atoi(org.AddDate); err == nil {
+					if oldDate, err :=strconv.Atoi(orgs[orgsId].AddDate); err == nil {
+						if newDate > oldDate {
+							orgMap[org.Uid] = id
+							orgsMap[org.Uid] = org.KolType
+						}
+					}
+				}
+			} else {
+				orgMap[org.Uid] = id
+				orgsMap[org.Uid] = org.KolType
+			}
+		}
+	}
 	return nil
 }
 
@@ -101,6 +154,8 @@ func (s *Sheet) ReadSheet() error {
 			startFound, err := s.file.SearchSheet(sheetName, s.start)
 			if err != nil {
 				return err
+			} else if startFound == nil {
+				continue
 			}
 			s.col, s.row, err = excelize.CellNameToCoordinates(startFound[0])
 
@@ -125,7 +180,9 @@ func (s *Sheet) ReadSheet() error {
 						}
 					}
 					continue
-				} else if (colsData == nil) || (len(colsData[0]) == 0) || (len(colsData) > moneyIndex && len(colsData[moneyIndex]) == 0) {
+				} else if (colsData == nil) || (len(colsData[s.col-1]) == 0) ||
+					(len(colsData) > moneyIndex && len(colsData[moneyIndex-1]) == 0) {
+					// TODO: need a better judgement for data end
 					break
 				}
 				s.data = append(s.data, colsData)
@@ -168,9 +225,24 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 
 		// deal with month
 		dstAxis, _ = excelize.CoordinatesToCellName(1, s.row)
-		err = s.file.SetCellValue(s.name, dstAxis, "2021/" + from.month + "/1")
+		err = s.file.SetCellValue(s.name, dstAxis, "2021/"+from.month+"/1")
 		if err != nil {
 			return err
+		}
+		exp := "yyyy\"年\"m\"月\""
+		style, err := s.file.NewStyle(&excelize.Style{CustomNumFmt: &exp})
+		err = s.file.SetCellStyle(s.name, dstAxis, dstAxis, style)
+		if err != nil {
+			return err
+		}
+
+		// deal with org
+		if org, exist := s.org[colsData[orgIndex]]; exist {
+			dstAxis, _ := excelize.CoordinatesToCellName(2, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, org)
+		} else {
+			dstAxis, _ := excelize.CoordinatesToCellName(2, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, "其他_付费kol")
 		}
 
 		// deal with sum
@@ -204,20 +276,41 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 }
 
 func (c *Collect) Run() {
-	if err := c.LoadSrcExcels(); err != nil {
+	// load all src files, record fd
+	if err := c.LoadSrcFiles(); err != nil {
 		fmt.Println(err)
 	}
-	if err := c.CreateDstExcel("collect.xlsx"); err != nil {
+	// create dst file for output
+	if err := c.CreateDstFile("collect.xlsx"); err != nil {
 		fmt.Println(err)
 	}
 
+	// Step 1: read csv
+	orgsMap := make(map[string]string)
+	if err := c.ReadCSV(orgsMap); err != nil {
+		fmt.Println(err)
+	}
+
+	// temp test
+	for uid, org := range orgsMap {
+		fmt.Println(uid, " : ", org)
+	}
+
+	// Step 2: read sheet in src excel files, and write to dst file
 	sheets := make([]Sheet, 0)
-	for fname, f := range c.SrcFiles {
+	for fname, f := range c.srcFiles {
 		monthReg1 := regexp.MustCompile(`[^\d]\d+月`)
 		monthReg2 := regexp.MustCompile(`\d+`)
 		monthRes := monthReg2.FindStringSubmatch(monthReg1.FindStringSubmatch(fname)[0])[0]
 		sheets = append(sheets, Sheet {
 			name: "内容创作者",
+			start: "运营部门",
+			file: f,
+			month: monthRes,
+			typeIndex: 0,
+		})
+		sheets = append(sheets, Sheet {
+			name: "内容采购",
 			start: "运营部门",
 			file: f,
 			month: monthRes,
@@ -229,7 +322,8 @@ func (c *Collect) Run() {
 		name: "大神内域作者费用明细",
 		row: 1,
 		col: 1,
-		file: c.DstFiles["collect.xlsx"],
+		file: c.dstFiles["collect.xlsx"],
+		org: orgsMap,
 	}
 
 	for _, sheet := range sheets {

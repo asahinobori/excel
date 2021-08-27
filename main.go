@@ -1,6 +1,8 @@
 package main
 
-import "excel/collect"
+import (
+	"excel/collect"
+)
 
 func main() {
     collectInstance := collect.NewCollect("src", "dst")
