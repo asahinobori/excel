@@ -15,37 +15,37 @@ import (
 
 var dirDefault = "."
 
-var collectMap  = map[int]int {
-	1 : 3,
-	2 : 4,
-	3 : 13,
-	5 : 5,
-	6 : 6,
+var collectMap = map[int]int{
+	1: 3,
+	2: 4,
+	3: 13,
+	5: 5,
+	6: 6,
 }
 
 const orgIndex = 4
 const moneyIndex = 9
 
 type Collect struct {
-	srcDir, dstDir string
-	srcFiles, dstFiles map[string]*excelize.File  // file_name, fd
-	srcCsvFiles map[string]*os.File
+	srcDir, dstDir     string
+	srcFiles, dstFiles map[string]*excelize.File // file_name, fd
+	srcCsvFiles        map[string]*os.File
 }
 
 type Sheet struct {
-	name string  // sheet name
-	start string  // start coordinates value for search
-	row, col int  // row and col index now
-	file *excelize.File
-	data [][]string  // each col data of each row
-	month string
+	name      string // sheet name
+	start     string // start coordinates value for search
+	row, col  int    // row and col index now
+	file      *excelize.File
+	data      [][]string // each col data of each row
+	month     string
 	typeIndex int
-	org map[string]string  // uid, org
+	org       map[string]string // uid, org
 }
 
 type Org struct {
 	KolType string `csv:"kol_type"`
-	Uid string `csv:"uid"`
+	Uid     string `csv:"uid"`
 	AddDate string `csv:"add_date"`
 }
 
@@ -59,11 +59,11 @@ func NewCollect(args ...string) *Collect {
 		dstDirSet = args[1]
 	}
 
-	return &Collect {
-		srcDir: srcDirSet,
-		dstDir: dstDirSet,
-		srcFiles: make(map[string]*excelize.File),
-		dstFiles: make(map[string]*excelize.File),
+	return &Collect{
+		srcDir:      srcDirSet,
+		dstDir:      dstDirSet,
+		srcFiles:    make(map[string]*excelize.File),
+		dstFiles:    make(map[string]*excelize.File),
 		srcCsvFiles: make(map[string]*os.File),
 	}
 }
@@ -82,7 +82,7 @@ func (c *Collect) LoadSrcFiles() error {
 			c.srcFiles[file.Name()] = f
 			// fmt.Println("successfully load", file.Name())
 		} else if strings.HasSuffix(file.Name(), "csv") {
-			f, err := os.OpenFile(c.srcDir + "/" + file.Name(), os.O_RDWR, os.ModePerm)
+			f, err := os.OpenFile(c.srcDir+"/"+file.Name(), os.O_RDWR, os.ModePerm)
 			if err != nil {
 				panic(err)
 			}
@@ -97,13 +97,13 @@ func (c *Collect) CreateDstFile(filename string) error {
 	f := excelize.NewFile()
 	s, err := os.Stat(filepath.Dir(c.dstDir + "/" + filename))
 	if err != nil && os.IsNotExist(err) {
-		err := os.MkdirAll(filepath.Dir(c.dstDir + "/" + filename), 0755)
+		err := os.MkdirAll(filepath.Dir(c.dstDir+"/"+filename), 0755)
 		if err != nil {
 			return err
 		}
 	} else {
 		if !s.IsDir() {
-			return fmt.Errorf("path %s is not dir", filepath.Dir(c.dstDir + "/" + filename))
+			return fmt.Errorf("path %s is not dir", filepath.Dir(c.dstDir+"/"+filename))
 		}
 	}
 	// TODO: backup old file before save as new file
@@ -130,8 +130,8 @@ func (c *Collect) ReadCSV(orgsMap map[string]string) error {
 				if strings.Contains(orgs[orgsId].KolType, "其他") && !strings.Contains(org.KolType, "其他") {
 					orgMap[org.Uid] = id
 					orgsMap[org.Uid] = org.KolType
-				} else if newDate, err :=strconv.Atoi(org.AddDate); err == nil {
-					if oldDate, err :=strconv.Atoi(orgs[orgsId].AddDate); err == nil {
+				} else if newDate, err := strconv.Atoi(org.AddDate); err == nil {
+					if oldDate, err := strconv.Atoi(orgs[orgsId].AddDate); err == nil {
 						if newDate > oldDate {
 							orgMap[org.Uid] = id
 							orgsMap[org.Uid] = org.KolType
@@ -297,28 +297,28 @@ func (c *Collect) Run() {
 		monthReg1 := regexp.MustCompile(`[^\d]\d+月`)
 		monthReg2 := regexp.MustCompile(`\d+`)
 		monthRes := monthReg2.FindStringSubmatch(monthReg1.FindStringSubmatch(fname)[0])[0]
-		sheets = append(sheets, Sheet {
-			name: "内容创作者",
-			start: "运营部门",
-			file: f,
-			month: monthRes,
+		sheets = append(sheets, Sheet{
+			name:      "内容创作者",
+			start:     "运营部门",
+			file:      f,
+			month:     monthRes,
 			typeIndex: 0,
 		})
-		sheets = append(sheets, Sheet {
-			name: "内容采购",
-			start: "运营部门",
-			file: f,
-			month: monthRes,
+		sheets = append(sheets, Sheet{
+			name:      "内容采购",
+			start:     "运营部门",
+			file:      f,
+			month:     monthRes,
 			typeIndex: 0,
 		})
 	}
 
-	targetSheet := &Sheet {
+	targetSheet := &Sheet{
 		name: "大神内域作者费用明细",
-		row: 1,
-		col: 1,
+		row:  1,
+		col:  1,
 		file: c.dstFiles["collect.xlsx"],
-		org: orgsMap,
+		org:  orgsMap,
 	}
 
 	for _, sheet := range sheets {
