@@ -270,11 +270,8 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 		} else if strings.Contains(colsData[from.typeIndex], "视频") {
 			dstAxis, _ := excelize.CoordinatesToCellName(7, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
-		} else if strings.Contains(colsData[from.typeIndex], "文") {
-			dstAxis, _ := excelize.CoordinatesToCellName(8, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
 		} else {
-			dstAxis, _ := excelize.CoordinatesToCellName(9, s.row)
+			dstAxis, _ := excelize.CoordinatesToCellName(8, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
 		}
 		if err != nil {
