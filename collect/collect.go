@@ -23,8 +23,12 @@ var collectMap = map[int]int{
 	6: 6,
 }
 
-const orgIndex = 4
-const moneyIndex = 9
+const (
+	// start from zero
+	uidIndex      = 4
+	nickNameIndex = 5
+	moneyIndex    = 9
+)
 
 type Collect struct {
 	srcDir, dstDir     string
@@ -150,6 +154,10 @@ func (c *Collect) ReadCSV(orgsMap map[string]string) error {
 func (s *Sheet) ReadSheet() error {
 	sheetList := s.file.GetSheetList()
 	for _, sheetName := range sheetList {
+		// skip hidden sheet
+		if !s.file.GetSheetVisible(sheetName) {
+			continue
+		}
 		if strings.Contains(sheetName, s.name) {
 			startFound, err := s.file.SearchSheet(sheetName, s.start)
 			if err != nil {
@@ -180,10 +188,16 @@ func (s *Sheet) ReadSheet() error {
 						}
 					}
 					continue
-				} else if (colsData == nil) || (len(colsData[s.col-1]) == 0) ||
-					(len(colsData) > moneyIndex && len(colsData[moneyIndex-1]) == 0) {
-					// TODO: need a better judgement for data end
-					break
+				} else if colsData == nil {
+					break // absolutely data end
+				} else if (len(colsData) > moneyIndex) &&
+					(len(colsData[uidIndex]) == 0) && (len(colsData[nickNameIndex]) == 0) && (len(colsData[moneyIndex]) == 0) {
+					break // maybe data end
+				} else if (len(colsData) > moneyIndex) &&
+					((len(colsData[uidIndex]) == 0) || (len(colsData[nickNameIndex]) == 0) || (len(colsData[moneyIndex-1]) == 0) || (len(colsData[moneyIndex]) == 0)) {
+					continue // data not enough
+				} else if len(colsData) <= moneyIndex {
+					break // maybe data end
 				}
 				s.data = append(s.data, colsData)
 			}
@@ -203,7 +217,11 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 	}
 	if !foundSheet {
 		// create new sheet
-		_ = s.file.NewSheet(s.name)
+		index := s.file.NewSheet(s.name)
+		s.file.SetActiveSheet(index)
+		if err := s.file.SetSheetVisible("Sheet1", false); err != nil {
+			return err
+		}
 		if err := s.file.Save(); err != nil {
 			return err
 		}
@@ -237,7 +255,7 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 		}
 
 		// deal with org
-		if org, exist := s.org[colsData[orgIndex]]; exist {
+		if org, exist := s.org[colsData[uidIndex]]; exist {
 			dstAxis, _ := excelize.CoordinatesToCellName(2, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, org)
 		} else {
@@ -254,6 +272,9 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
 		} else if strings.Contains(colsData[from.typeIndex], "文") {
 			dstAxis, _ := excelize.CoordinatesToCellName(8, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
+		} else {
+			dstAxis, _ := excelize.CoordinatesToCellName(9, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
 		}
 		if err != nil {
@@ -275,20 +296,20 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 	return nil
 }
 
-func (c *Collect) Run() {
+func (c *Collect) Run() error {
 	// load all src files, record fd
 	if err := c.LoadSrcFiles(); err != nil {
-		fmt.Println(err)
+		return err
 	}
 	// create dst file for output
 	if err := c.CreateDstFile("collect.xlsx"); err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	// Step 1: read csv
 	orgsMap := make(map[string]string)
 	if err := c.ReadCSV(orgsMap); err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	// Step 2: read sheet in src excel files, and write to dst file
@@ -323,11 +344,11 @@ func (c *Collect) Run() {
 
 	for _, sheet := range sheets {
 		if err := sheet.ReadSheet(); err != nil {
-			fmt.Println(err)
-			continue
+			return err
 		}
 		if err := targetSheet.WriteSheet(&sheet); err != nil {
-			fmt.Println(err)
+			return err
 		}
 	}
+	return nil
 }
