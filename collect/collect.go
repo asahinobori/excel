@@ -291,11 +291,6 @@ func (c *Collect) Run() {
 		fmt.Println(err)
 	}
 
-	// temp test
-	for uid, org := range orgsMap {
-		fmt.Println(uid, " : ", org)
-	}
-
 	// Step 2: read sheet in src excel files, and write to dst file
 	sheets := make([]Sheet, 0)
 	for fname, f := range c.srcFiles {
