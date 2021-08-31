@@ -15,20 +15,37 @@ import (
 
 var dirDefault = "."
 
-var collectMap = map[int]int{
-	1: 3,
-	2: 4,
-	3: 13,
-	5: 5,
-	6: 6,
-}
-
 const (
-	// start from zero
-	uidIndex      = 4
-	nickNameIndex = 5
-	moneyIndex    = 9
+	// start from zero for src
+	department = 0 // 运营部门
+	game       = 1 // 游戏产品
+	sponsor    = 2 // 出资方
+	uid        = 4 // UID
+	nickName   = 5 // 昵称
+	money      = 9 // 金额（橙列）
+
+	// start from zero for dst
+	monthD      = 0  // 月份
+	orgD        = 1  // 机构
+	departmentD = 2  // 部门
+	gameD       = 3  // 游戏
+	uidD        = 4  // UID
+	nickNameD   = 5  // 昵称
+	videoMoneyD = 6  // 视频费用
+	textMoneyD  = 7  // 图文费用
+	unclsMoneyD = 8  // 不能区分（费用）
+	typeD       = 10 // 类别
+	sponsorD    = 12 // 出资方
+	readCntD    = 13 // 阅读量
 )
+
+var collectMap = map[int]int{
+	department: departmentD,
+	game:       gameD,
+	sponsor:    sponsorD,
+	uid:        uidD,
+	nickName:   nickNameD,
+}
 
 type Collect struct {
 	srcDir, dstDir     string
@@ -37,14 +54,15 @@ type Collect struct {
 }
 
 type Sheet struct {
-	name      string // sheet name
-	start     string // start coordinates value for search
-	row, col  int    // row and col index now
-	file      *excelize.File
-	data      [][]string // each col data of each row
-	month     string
-	typeIndex int
-	org       map[string]string // uid, org
+	name         string // sheet name
+	start        string // start coordinates value for search
+	row, col     int    // row and col index now
+	file         *excelize.File
+	data         [][]string // each col data of each row
+	month        string
+	dynTypeIndex int
+	readCntIndex int
+	org          map[string]string // uid, org
 }
 
 type Org struct {
@@ -183,20 +201,22 @@ func (s *Sheet) ReadSheet() error {
 				} else if curRow == s.row {
 					for id, colData := range colsData {
 						if strings.Contains(colData, "动态类型") {
-							s.typeIndex = id
+							s.dynTypeIndex = id
+						} else if strings.Contains(colData, "阅读量") {
+							s.readCntIndex = id
 							break
 						}
 					}
 					continue
 				} else if colsData == nil {
 					break // absolutely data end
-				} else if (len(colsData) > moneyIndex) &&
-					(len(colsData[uidIndex]) == 0) && (len(colsData[nickNameIndex]) == 0) && (len(colsData[moneyIndex]) == 0) {
+				} else if (len(colsData) > money) &&
+					(len(colsData[uid]) == 0) && (len(colsData[nickName]) == 0) && (len(colsData[money]) == 0) {
 					break // maybe data end
-				} else if (len(colsData) > moneyIndex) &&
-					((len(colsData[uidIndex]) == 0) || (len(colsData[nickNameIndex]) == 0) || (len(colsData[moneyIndex-1]) == 0) || (len(colsData[moneyIndex]) == 0)) {
+				} else if (len(colsData) > money) &&
+					((len(colsData[uid]) == 0) || (len(colsData[nickName]) == 0) || (len(colsData[money-1]) == 0) || (len(colsData[money]) == 0)) {
 					continue // data not enough
-				} else if len(colsData) <= moneyIndex {
+				} else if len(colsData) <= money {
 					break // maybe data end
 				}
 				s.data = append(s.data, colsData)
@@ -232,8 +252,8 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 	for _, colsData := range from.data {
 		s.row++
 		for col, colData := range colsData {
-			if dstCol, ok := collectMap[col+1]; ok {
-				dstAxis, _ = excelize.CoordinatesToCellName(dstCol, s.row)
+			if dstCol, ok := collectMap[col]; ok {
+				dstAxis, _ = excelize.CoordinatesToCellName(dstCol+1, s.row)
 				err = s.file.SetCellValue(s.name, dstAxis, colData)
 				if err != nil {
 					return err
@@ -242,7 +262,7 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 		}
 
 		// deal with month
-		dstAxis, _ = excelize.CoordinatesToCellName(1, s.row)
+		dstAxis, _ = excelize.CoordinatesToCellName(monthD+1, s.row)
 		err = s.file.SetCellValue(s.name, dstAxis, "2021/"+from.month+"/1")
 		if err != nil {
 			return err
@@ -255,34 +275,43 @@ func (s *Sheet) WriteSheet(from *Sheet) error {
 		}
 
 		// deal with org
-		if org, exist := s.org[colsData[uidIndex]]; exist {
-			dstAxis, _ := excelize.CoordinatesToCellName(2, s.row)
+		if org, exist := s.org[colsData[uid]]; exist {
+			dstAxis, _ := excelize.CoordinatesToCellName(orgD+1, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, org)
 		} else {
-			dstAxis, _ := excelize.CoordinatesToCellName(2, s.row)
+			dstAxis, _ := excelize.CoordinatesToCellName(orgD+1, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, "其他_付费kol")
 		}
 
 		// deal with sum
-		if (from.typeIndex == 0) || (colsData[from.typeIndex] == "") {
-			dstAxis, _ := excelize.CoordinatesToCellName(9, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
-		} else if strings.Contains(colsData[from.typeIndex], "视频") {
-			dstAxis, _ := excelize.CoordinatesToCellName(7, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
+		if (from.dynTypeIndex == 0) || (colsData[from.dynTypeIndex] == "") {
+			dstAxis, _ := excelize.CoordinatesToCellName(unclsMoneyD+1, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
+		} else if strings.Contains(colsData[from.dynTypeIndex], "视频") {
+			dstAxis, _ := excelize.CoordinatesToCellName(videoMoneyD+1, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
 		} else {
-			dstAxis, _ := excelize.CoordinatesToCellName(8, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[moneyIndex])
+			dstAxis, _ := excelize.CoordinatesToCellName(textMoneyD+1, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
 		}
 		if err != nil {
 			return err
 		}
 
 		// deal with type
-		dstAxis, _ = excelize.CoordinatesToCellName(11, s.row)
+		dstAxis, _ = excelize.CoordinatesToCellName(typeD+1, s.row)
 		err = s.file.SetCellValue(s.name, dstAxis, from.name)
 		if err != nil {
 			return err
+		}
+
+		// deal with readCnt
+		if from.readCntIndex != 0 {
+			dstAxis, _ = excelize.CoordinatesToCellName(readCntD+1, s.row)
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[from.readCntIndex])
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -316,18 +345,20 @@ func (c *Collect) Run() error {
 		monthReg2 := regexp.MustCompile(`\d+`)
 		monthRes := monthReg2.FindStringSubmatch(monthReg1.FindStringSubmatch(fname)[0])[0]
 		sheets = append(sheets, Sheet{
-			name:      "内容创作者",
-			start:     "运营部门",
-			file:      f,
-			month:     monthRes,
-			typeIndex: 0,
+			name:         "内容创作者",
+			start:        "运营部门",
+			file:         f,
+			month:        monthRes,
+			dynTypeIndex: 0,
+			readCntIndex: 0,
 		})
 		sheets = append(sheets, Sheet{
-			name:      "内容采购",
-			start:     "运营部门",
-			file:      f,
-			month:     monthRes,
-			typeIndex: 0,
+			name:         "内容采购",
+			start:        "运营部门",
+			file:         f,
+			month:        monthRes,
+			dynTypeIndex: 0,
+			readCntIndex: 0,
 		})
 	}
 
