@@ -202,9 +202,8 @@ func (s *Sheet) ReadSheet() error {
 					for id, colData := range colsData {
 						if strings.Contains(colData, "动态类型") {
 							s.dynTypeIndex = id
-						} else if strings.Contains(colData, "阅读量") {
+						} else if strings.Contains(colData, "阅读量") && !strings.Contains(colData, "求和") {
 							s.readCntIndex = id
-							break
 						}
 					}
 					continue
