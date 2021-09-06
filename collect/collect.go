@@ -106,8 +106,14 @@ func (c *Collect) Run() error {
 	if err := c.CollectForContent(); err != nil {
 		return err
 	}
-
+	// collect for common
 	if err := c.CollectForAll("活动"); err != nil {
+		return err
+	}
+	if err := c.CollectForAll("CPS分发"); err != nil {
+		return err
+	}
+	if err := c.CollectForAll("新游预约"); err != nil {
 		return err
 	}
 
