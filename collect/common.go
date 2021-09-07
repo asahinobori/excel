@@ -95,15 +95,13 @@ func convertIfDate(f *excelize.File, sheetName string, col int, row int, data st
 	return strconv.FormatInt(int64(dateExcel), 10), true
 }
 
-func splitDelimiters(r rune) bool {
-	return r == '.' || r == '/'
-}
-
 func parseDate(dateRaw string) (string, error) {
 	// support "2021.09.12", or "2021.9.12"
 	// support "2021/09/12", or "2021/9/12"
 	date := ""
-	dateSlice := strings.FieldsFunc(dateRaw, splitDelimiters)
+	dateSlice := strings.FieldsFunc(dateRaw, func(r rune) bool {
+		return r == '.' || r == '/'
+	})
 	if len(dateSlice) == 1 {
 		// no split delimiter found, go on and support "20210912"
 		if len(dateSlice[0]) == 8 {
