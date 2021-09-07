@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 var dirDefault = "."
@@ -102,20 +103,54 @@ func (c *Collect) Run() error {
 		return err
 	}
 
-	// collect for content
-	if err := c.CollectForContent(); err != nil {
-		return err
-	}
+	var runErr error = nil
+	errChan := make(chan error)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		// collect for content
+		defer wg.Done()
+		if err := c.CollectForContent(); err != nil {
+			errChan <- err
+		} else {
+			errChan <- nil
+		}
+	}()
 	// collect for common
-	if err := c.CollectForAll("活动"); err != nil {
-		return err
-	}
-	if err := c.CollectForAll("CPS分发"); err != nil {
-		return err
-	}
-	if err := c.CollectForAll("新游预约"); err != nil {
-		return err
-	}
-
-	return nil
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := c.CollectForAll("活动"); err != nil {
+			errChan <- err
+		} else {
+			errChan <- nil
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := c.CollectForAll("CPS分发"); err != nil {
+			errChan <- err
+		} else {
+			errChan <- nil
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := c.CollectForAll("新游预约"); err != nil {
+			errChan <- err
+		} else {
+			errChan <- nil
+		}
+	}()
+	go func() {
+		for err := range errChan {
+			if err != nil {
+				runErr = err
+			}
+		}
+	}()
+	wg.Wait()
+	return runErr
 }
