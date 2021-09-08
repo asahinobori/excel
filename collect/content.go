@@ -148,6 +148,7 @@ func (s *Sheet) ReadSheetContent() error {
 }
 
 func (s *Sheet) WriteSheetContent(from *Sheet) error {
+	s.fileMutex.Lock()
 	sheetList := s.file.GetSheetList()
 	foundSheet := false
 	for _, sheetName := range sheetList {
@@ -167,7 +168,7 @@ func (s *Sheet) WriteSheetContent(from *Sheet) error {
 			return err
 		}
 	}
-
+	s.fileMutex.Unlock()
 	var dstAxis string
 	var err error
 	for _, colsData := range from.data {
@@ -271,11 +272,12 @@ func (c *Collect) CollectForContent() error {
 	}
 
 	targetSheet := &Sheet{
-		name: "大神内域作者费用明细",
-		row:  1,
-		col:  1,
-		file: c.dstFiles["项目立项及实际费用明细.xlsx"],
-		org:  orgsMap,
+		name:      "大神内域作者费用明细",
+		row:       1,
+		col:       1,
+		file:      c.dstFiles["项目立项及实际费用明细.xlsx"],
+		fileMutex: c.dstFilesMutex["项目立项及实际费用明细.xlsx"],
+		org:       orgsMap,
 	}
 
 	for _, sheet := range sheets {

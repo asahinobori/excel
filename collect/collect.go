@@ -15,17 +15,19 @@ type Collect struct {
 	srcDir, dstDir     string
 	srcFiles, dstFiles map[string]*excelize.File // file_name, fd
 	srcCsvFiles        map[string]*os.File
+	dstFilesMutex      map[string]*sync.Mutex
 }
 
 type Sheet struct {
-	name     string // sheet name
-	start    string // start coordinates value for search
-	row, col int    // row and col index now
-	file     *excelize.File
-	data     [][]string // each col data of each row
-	month    string
-	indexs   []int             // special col index
-	org      map[string]string // uid, org
+	name      string // sheet name
+	start     string // start coordinates value for search
+	row, col  int    // row and col index now
+	file      *excelize.File
+	fileMutex *sync.Mutex
+	data      [][]string // each col data of each row
+	month     string
+	indexs    []int             // special col index
+	org       map[string]string // uid, org
 }
 
 func NewCollect(args ...string) *Collect {
@@ -39,11 +41,12 @@ func NewCollect(args ...string) *Collect {
 	}
 
 	return &Collect{
-		srcDir:      srcDirSet,
-		dstDir:      dstDirSet,
-		srcFiles:    make(map[string]*excelize.File),
-		dstFiles:    make(map[string]*excelize.File),
-		srcCsvFiles: make(map[string]*os.File),
+		srcDir:        srcDirSet,
+		dstDir:        dstDirSet,
+		srcFiles:      make(map[string]*excelize.File),
+		dstFiles:      make(map[string]*excelize.File),
+		srcCsvFiles:   make(map[string]*os.File),
+		dstFilesMutex: make(map[string]*sync.Mutex),
 	}
 }
 
@@ -90,6 +93,7 @@ func (c *Collect) CreateDstFile(filename string) error {
 		return err
 	}
 	c.dstFiles[filename] = f
+	c.dstFilesMutex[filename] = new(sync.Mutex)
 	return nil
 }
 

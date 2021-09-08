@@ -227,6 +227,7 @@ func (s *Sheet) ReadSheetAll() error {
 }
 
 func (s *Sheet) WriteSheetAll(from *Sheet) error {
+	s.fileMutex.Lock()
 	sheetList := s.file.GetSheetList()
 	foundSheet := false
 	for _, sheetName := range sheetList {
@@ -246,7 +247,7 @@ func (s *Sheet) WriteSheetAll(from *Sheet) error {
 			return err
 		}
 	}
-
+	s.fileMutex.Unlock()
 	var dstAxis string
 	var err error
 	dateStyle, _ := s.file.NewStyle(`{"number_format": 14}`)
@@ -297,10 +298,11 @@ func (c *Collect) CollectForAll(keyword string) error {
 	}
 
 	targetSheet := &Sheet{
-		name: keyword,
-		row:  1,
-		col:  1,
-		file: c.dstFiles["项目立项及实际费用明细.xlsx"],
+		name:      keyword,
+		row:       1,
+		col:       1,
+		file:      c.dstFiles["项目立项及实际费用明细.xlsx"],
+		fileMutex: c.dstFilesMutex["项目立项及实际费用明细.xlsx"],
 	}
 
 	for _, sheet := range sheets {
