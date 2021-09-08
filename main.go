@@ -10,6 +10,7 @@ func main() {
 	collectInstance := collect.NewCollect("src", "dst")
 	err := collectInstance.Run()
 	if err != nil {
+		fmt.Println(err)
 		fmt.Println("处理失败！！！请到下面链接反馈问题")
 		fmt.Println("https://docs.google.com/spreadsheets/d/1GkcPa0WjVt2UBVnRNQ-1SO49vYsR0CQgk3qtA-VxE-Y/edit#gid=0")
 	} else {

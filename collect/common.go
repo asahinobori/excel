@@ -98,6 +98,9 @@ func convertIfDate(f *excelize.File, sheetName string, col int, row int, data st
 func parseDate(dateRaw string) (string, error) {
 	// support "2021.09.12", or "2021.9.12"
 	// support "2021/09/12", or "2021/9/12"
+	if dateRaw == "" {
+		return dateRaw, nil
+	}
 	date := ""
 	dateSlice := strings.FieldsFunc(dateRaw, func(r rune) bool {
 		return r == '.' || r == '/'
@@ -190,7 +193,7 @@ func (s *Sheet) ReadSheetAll() error {
 					}
 
 					needContinue := false // true for data not enough
-					if strings.Contains(colsData[commonMap[s.name]], "辅助列") {
+					if strings.Contains(colsData[commonMap[s.name]], "辅助") {
 						continue // skip this row
 					}
 					for i := 0; i <= commonMap[s.name]; i++ {
