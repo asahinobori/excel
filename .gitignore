@@ -1,9 +1,10 @@
 src/
 dst/
 deploy/
-*.sum
 *.exe
+*.rar
+*.sum
 *.idea/
 *.o
 *.a
-.rar
+
