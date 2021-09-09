@@ -7,4 +7,5 @@ deploy/
 *.idea/
 *.o
 *.a
+*excel
 
