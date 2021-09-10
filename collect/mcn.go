@@ -75,6 +75,9 @@ func (s *Sheet) ReadSheetMcn() error {
 				for rowsIt.Next() {
 					curRow++
 					colsData, err := rowsIt.Columns()
+					if colsData != nil {
+						colsData = colsData[s.col-1:]
+					}
 					if err != nil {
 						return err
 					} else if curRow < s.row {
@@ -85,12 +88,12 @@ func (s *Sheet) ReadSheetMcn() error {
 								s.indexs[mcnTypeId] = id
 							}
 						}
-						break
+						continue
 					} else if colsData == nil {
 						break // absolutely data end
-					} else if len(colsData) > (mcnUid + s.col - 1) {
+					} else if len(colsData) > mcnUid {
 						needBreak := true // maybe data end
-						for i := s.col - 1; i <= (mcnUid + s.col - 1); i++ {
+						for i := s.col - 1; i <= mcnUid; i++ {
 							if len(colsData[i]) != 0 {
 								needBreak = false
 								break
@@ -106,7 +109,7 @@ func (s *Sheet) ReadSheetMcn() error {
 						}
 
 						needContinue := false // true for data not enough
-						for i := s.col - 1; i <= (mcnUid + s.col - 1); i++ {
+						for i := s.col - 1; i <= mcnUid; i++ {
 							if len(colsData[i]) == 0 {
 								needContinue = true
 								break
@@ -116,13 +119,13 @@ func (s *Sheet) ReadSheetMcn() error {
 							// (len(colsData[0]) == 0) || ... || (len(colsData[n]) == 0) is true
 							continue
 						}
-					} else if len(colsData) <= (mcnUid + s.col - 1) {
+					} else if len(colsData) <= mcnUid {
 						break // maybe data end
 					}
 
-					colsData[mcnType+s.col-1] = colsData[s.indexs[mcnTypeId]]
+					colsData[mcnType] = colsData[s.indexs[mcnTypeId]]
 
-					s.data = append(s.data, colsData[s.col-1:])
+					s.data = append(s.data, colsData)
 				}
 			}
 		}
@@ -131,6 +134,7 @@ func (s *Sheet) ReadSheetMcn() error {
 }
 
 func (s *Sheet) WriteSheetMcn(from *Sheet) error {
+	s.fileMutex.Lock()
 	sheetList := s.file.GetSheetList()
 	foundSheet := false
 	for _, sheetName := range sheetList {
@@ -150,7 +154,7 @@ func (s *Sheet) WriteSheetMcn(from *Sheet) error {
 			return err
 		}
 	}
-
+	s.fileMutex.Unlock()
 	var dstAxis string
 	var err error
 	exp := "yyyy\"年\"m\"月\""
@@ -207,6 +211,7 @@ func (c *Collect) CollectForMcn() error {
 		row:  1,
 		col:  1,
 		file: c.dstFiles["项目立项及实际费用明细.xlsx"],
+		fileMutex: c.dstFilesMutex["项目立项及实际费用明细.xlsx"],
 	}
 
 	for _, sheet := range sheets {

@@ -143,6 +143,8 @@ func (c *Collect) doTask(task string, wg *sync.WaitGroup, errChan chan error) {
 		err = c.CollectForAll("CPS分发")
 	case "newgame":
 		err = c.CollectForAll("新游预约")
+	case "mcn":
+		err = c.CollectForMcn()
 	default:
 		err = errors.New("unsupported task")
 	}
