@@ -1,6 +1,8 @@
 package collect
 
 import (
+	"errors"
+	"excel/config"
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"os"
@@ -9,9 +11,8 @@ import (
 	"sync"
 )
 
-var dirDefault = "."
-
 type Collect struct {
+	conf               *config.Config
 	srcDir, dstDir     string
 	srcFiles, dstFiles map[string]*excelize.File // file_name, fd
 	srcCsvFiles        map[string]*os.File
@@ -30,19 +31,11 @@ type Sheet struct {
 	org       map[string]string // uid, org
 }
 
-func NewCollect(args ...string) *Collect {
-	srcDirSet := dirDefault
-	dstDirSet := dirDefault
-	if len(args) >= 1 && len(args[0]) != 0 {
-		srcDirSet = args[0]
-	}
-	if len(args) >= 2 && len(args[1]) != 0 {
-		dstDirSet = args[1]
-	}
-
+func NewCollect(config *config.Config) *Collect {
 	return &Collect{
-		srcDir:        srcDirSet,
-		dstDir:        dstDirSet,
+		conf:          config,
+		srcDir:        config.SrcPath,
+		dstDir:        config.DstPath,
 		srcFiles:      make(map[string]*excelize.File),
 		dstFiles:      make(map[string]*excelize.File),
 		srcCsvFiles:   make(map[string]*os.File),
@@ -50,7 +43,7 @@ func NewCollect(args ...string) *Collect {
 	}
 }
 
-func (c *Collect) LoadSrcFiles() error {
+func (c *Collect) loadSrcFiles() error {
 	files, err := os.ReadDir(c.srcDir)
 	if err != nil {
 		return err
@@ -75,7 +68,7 @@ func (c *Collect) LoadSrcFiles() error {
 	return nil
 }
 
-func (c *Collect) CreateDstFile(filename string) error {
+func (c *Collect) createDstFile(filename string) error {
 	f := excelize.NewFile()
 	s, err := os.Stat(filepath.Dir(c.dstDir + "/" + filename))
 	if err != nil && os.IsNotExist(err) {
@@ -99,62 +92,68 @@ func (c *Collect) CreateDstFile(filename string) error {
 
 func (c *Collect) Run() error {
 	// load all src files, record fd
-	if err := c.LoadSrcFiles(); err != nil {
+	if err := c.loadSrcFiles(); err != nil {
 		return err
 	}
 	// create dst file for output
-	if err := c.CreateDstFile("项目立项及实际费用明细.xlsx"); err != nil {
+	if err := c.createDstFile("项目立项及实际费用明细.xlsx"); err != nil {
 		return err
 	}
 
-	var runErr error = nil
-	errChan := make(chan error)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		// collect for content
-		defer wg.Done()
-		if err := c.CollectForContent(); err != nil {
-			errChan <- err
-		} else {
-			errChan <- nil
+	// do task concurrently or sequentially
+	var runErr []error
+	errChan := make(chan error, len(c.conf.TaskMap))
+	wg := &sync.WaitGroup{}
+	for task, enabled := range c.conf.TaskMap {
+		if !enabled {
+			continue
 		}
-	}()
-	// collect for common
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := c.CollectForAll("活动"); err != nil {
-			errChan <- err
+		if c.conf.Concurrent {
+			wg.Add(1)
+			go c.doTask(task, wg, errChan)
 		} else {
-			errChan <- nil
+			c.doTask(task, wg, errChan)
 		}
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := c.CollectForAll("CPS分发"); err != nil {
-			errChan <- err
-		} else {
-			errChan <- nil
-		}
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := c.CollectForAll("新游预约"); err != nil {
-			errChan <- err
-		} else {
-			errChan <- nil
-		}
-	}()
-	go func() {
-		for err := range errChan {
-			if err != nil {
-				runErr = err
+
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			if err := <-errChan; err != nil {
+				runErr = append(runErr, err)
 			}
-		}
-	}()
+		}(wg)
+	}
+
 	wg.Wait()
-	return runErr
+	if runErr != nil {
+		return runErr[0] // only return the first error
+	} else {
+		return nil
+	}
+}
+
+func (c *Collect) doTask(task string, wg *sync.WaitGroup, errChan chan error) {
+	var err error
+	switch task {
+	case "content":
+		err = c.CollectForContent()
+	case "campaign":
+		err = c.CollectForAll("活动")
+	case "cps":
+		err = c.CollectForAll("CPS分发")
+	case "newgame":
+		err = c.CollectForAll("新游预约")
+	default:
+		err = errors.New("unsupported task")
+	}
+	if err != nil {
+		fmt.Println("task[", task, "]: failed")
+		errChan <- err
+	} else {
+		fmt.Println("task[", task, "]: successful")
+		errChan <- nil
+	}
+	if c.conf.Concurrent {
+		wg.Done()
+	}
 }
