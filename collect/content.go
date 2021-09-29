@@ -97,7 +97,7 @@ func (s *Sheet) ReadSheetContent() error {
 		if !s.file.GetSheetVisible(sheetName) {
 			continue
 		}
-		if strings.Contains(sheetName, s.name) {
+		if strings.Contains(sheetName, s.name) && !strings.Contains(sheetName, "论坛") {
 			startFound, err := s.file.SearchSheet(sheetName, s.start)
 			if err != nil {
 				return err
