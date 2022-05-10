@@ -24,6 +24,7 @@ type Sheet struct {
 	start     string // start coordinates value for search
 	row, col  int    // row and col index now
 	file      *excelize.File
+	fileName  string // file name of this sheet
 	fileMutex *sync.Mutex
 	data      [][]string // each col data of each row
 	month     string
@@ -50,7 +51,11 @@ func (c *Collect) loadSrcFiles() error {
 	}
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), "xlsx") || strings.HasSuffix(file.Name(), "xls") {
-			f, err := excelize.OpenFile(c.srcDir + "/" + file.Name())
+			osf, err := os.OpenFile(c.srcDir+"/"+file.Name(), os.O_RDONLY, os.ModePerm)
+			if err != nil {
+				return err
+			}
+			f, err := excelize.OpenReader(osf)
 			if err != nil {
 				return err
 			}

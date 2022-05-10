@@ -5,6 +5,7 @@
 package collect
 
 import (
+	"fmt"
 	"github.com/dimchansky/utfbom"
 	"github.com/gocarina/gocsv"
 	"github.com/xuri/excelize/v2"
@@ -21,7 +22,7 @@ const (
 	sponsor    = 2 // 出资方
 	uid        = 4 // UID
 	nickName   = 5 // 昵称
-	money      = 9 // 金额（橙列）
+	srcEnd     = 9 // 可能结束的列数(目前应该是金额（橙列），它可能是第J列或第K列)
 
 	// col start from zero for dst
 	monthD      = 0  // 月份
@@ -40,7 +41,8 @@ const (
 	// indexs in Sheet struct
 	dynType = 0
 	readCnt = 1
-	ctIdEnd = 2 // increase this number when add new index
+	money   = 2 // 金额（橙列）
+	ctIdEnd = 3 // increase this number when add new index
 )
 
 var contentMap = map[int]int{
@@ -120,23 +122,50 @@ func (s *Sheet) ReadSheetContent() error {
 				} else if curRow < s.row {
 					continue
 				} else if curRow == s.row {
+					dynTypeFound := 0
+					readCntFound := 0
+					moneyFound := 0
 					for id, colData := range colsData {
 						if strings.Contains(colData, "动态类型") {
 							s.indexs[dynType] = id
+							dynTypeFound++
 						} else if strings.Contains(colData, "阅读量") && !strings.Contains(colData, "求和") {
 							s.indexs[readCnt] = id
+							readCntFound++
+						} else if strings.Contains(colData, "税前金额（自动计算)") && !strings.Contains(colData, "求和") {
+							s.indexs[money] = id
+							moneyFound++
 						}
 					}
+					if dynTypeFound == 0 {
+						fmt.Println("错误：“动态类型”列找不到", sheetName, s.fileName)
+					} else if dynTypeFound > 1 {
+						fmt.Println("错误：多于1个“动态类型”列", sheetName, s.fileName)
+					}
+					if readCntFound == 0 {
+						fmt.Println("错误：“阅读量”列找不到", sheetName, s.fileName)
+					} else if readCntFound > 1 {
+						fmt.Println("错误：多于1个“阅读量”列", sheetName, s.fileName)
+					}
+					if moneyFound == 0 {
+						fmt.Println("错误：“税前金额”列找不到", sheetName, s.fileName)
+					} else if moneyFound > 1 {
+						fmt.Println("错误：多于1个“税前金额”列", sheetName, s.fileName)
+					}
+					if dynTypeFound == 0 || readCntFound == 0 || moneyFound == 0 || dynTypeFound > 1 || readCntFound > 1 || moneyFound > 1 {
+						break
+					}
+
 					continue
 				} else if colsData == nil {
 					break // absolutely data end
-				} else if (len(colsData) > money) &&
-					(len(colsData[uid]) == 0) && (len(colsData[nickName]) == 0) && (len(colsData[money]) == 0) {
+				} else if (len(colsData) > srcEnd) &&
+					(len(colsData[uid]) == 0) && (len(colsData[nickName]) == 0) && (len(colsData[s.indexs[money]]) == 0) {
 					break // maybe data end
-				} else if (len(colsData) > money) &&
-					((len(colsData[uid]) == 0) || (len(colsData[nickName]) == 0) || (len(colsData[money-1]) == 0) || (len(colsData[money]) == 0)) {
+				} else if (len(colsData) > srcEnd) &&
+					((len(colsData[uid]) == 0) || (len(colsData[nickName]) == 0) || (len(colsData[s.indexs[money]-1]) == 0) || (len(colsData[s.indexs[money]]) == 0)) {
 					continue // data not enough
-				} else if len(colsData) <= money {
+				} else if len(colsData) <= srcEnd {
 					break // maybe data end
 				}
 				s.data = append(s.data, colsData)
@@ -208,13 +237,13 @@ func (s *Sheet) WriteSheetContent(from *Sheet) error {
 		// deal with sum
 		if (from.indexs[dynType] == 0) || (from.indexs[dynType] >= len(colsData)) || (colsData[from.indexs[dynType]] == "") {
 			dstAxis, _ := excelize.CoordinatesToCellName(unclsMoneyD+1, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[from.indexs[money]])
 		} else if strings.Contains(colsData[from.indexs[dynType]], "视频") {
 			dstAxis, _ := excelize.CoordinatesToCellName(videoMoneyD+1, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[from.indexs[money]])
 		} else {
 			dstAxis, _ := excelize.CoordinatesToCellName(textMoneyD+1, s.row)
-			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
+			err = s.file.SetCellValue(s.name, dstAxis, colsData[from.indexs[money]])
 		}
 		if err != nil {
 			return err
@@ -256,18 +285,20 @@ func (c *Collect) CollectForContent() error {
 		monthReg2 := regexp.MustCompile(`\d+`)
 		monthRes := monthReg2.FindStringSubmatch(monthReg1.FindStringSubmatch(fname)[0])[0]
 		sheets = append(sheets, Sheet{
-			name:   "内容创作者",
-			start:  "运营部门",
-			file:   f,
-			month:  monthRes,
-			indexs: make([]int, ctIdEnd),
+			name:     "内容创作者",
+			start:    "运营部门",
+			file:     f,
+			fileName: fname,
+			month:    monthRes,
+			indexs:   make([]int, ctIdEnd),
 		})
 		sheets = append(sheets, Sheet{
-			name:   "内容采购",
-			start:  "运营部门",
-			file:   f,
-			month:  monthRes,
-			indexs: make([]int, ctIdEnd),
+			name:     "内容采购",
+			start:    "运营部门",
+			file:     f,
+			fileName: fname,
+			month:    monthRes,
+			indexs:   make([]int, ctIdEnd),
 		})
 	}
 
@@ -276,6 +307,7 @@ func (c *Collect) CollectForContent() error {
 		row:       1,
 		col:       1,
 		file:      c.dstFiles["项目立项及实际费用明细.xlsx"],
+		fileName:  "项目立项及实际费用明细.xlsx",
 		fileMutex: c.dstFilesMutex["项目立项及实际费用明细.xlsx"],
 		org:       orgsMap,
 	}
