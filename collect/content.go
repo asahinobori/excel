@@ -206,7 +206,7 @@ func (s *Sheet) WriteSheetContent(from *Sheet) error {
 		}
 
 		// deal with sum
-		if (from.indexs[dynType] == 0) || (colsData[from.indexs[dynType]] == "") {
+		if (from.indexs[dynType] == 0) || (from.indexs[dynType] >= len(colsData)) || (colsData[from.indexs[dynType]] == "") {
 			dstAxis, _ := excelize.CoordinatesToCellName(unclsMoneyD+1, s.row)
 			err = s.file.SetCellValue(s.name, dstAxis, colsData[money])
 		} else if strings.Contains(colsData[from.indexs[dynType]], "视频") {
