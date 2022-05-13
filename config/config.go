@@ -1,6 +1,7 @@
 package config
 
 import (
+	"excel/log"
 	"github.com/spf13/viper"
 )
 
@@ -8,6 +9,7 @@ type Config struct {
 	Concurrent       bool
 	TaskMap          map[string]bool
 	SrcPath, DstPath string
+	LogLevel         string
 }
 
 func InitConf() *Config {
@@ -16,15 +18,19 @@ func InitConf() *Config {
 	concur := true
 
 	// about task, default is all enable
-	taskMap := make(map[string]bool, 4)
+	taskMap := make(map[string]bool, 5)
 	taskMap["content"] = true
 	taskMap["campaign"] = true
 	taskMap["cps"] = true
 	taskMap["newgame"] = true
+	taskMap["mcn"] = true
 
 	// about src and dst path
 	src := "src"
 	dst := "dst"
+
+	// about log
+	logl := "error"
 
 	// parse config file
 	viper.SetConfigName("config.ini")
@@ -37,6 +43,7 @@ func InitConf() *Config {
 			TaskMap:    taskMap,
 			SrcPath:    src,
 			DstPath:    dst,
+			LogLevel:   logl,
 		}
 	}
 
@@ -56,11 +63,20 @@ func InitConf() *Config {
 
 	src = viper.GetString("directory.src")
 	dst = viper.GetString("directory.dst")
+	logl = viper.GetString("log.level")
 	if src == "" {
 		src = "src"
 	}
 	if dst == "" {
 		dst = "dst"
+	}
+	if logl == "" {
+		logl = "error"
+	}
+
+	// set log level
+	if err := log.SetLevel(logl); err != nil {
+		logl = "error"
 	}
 
 	return &Config{
@@ -68,5 +84,6 @@ func InitConf() *Config {
 		TaskMap:    taskMap,
 		SrcPath:    src,
 		DstPath:    dst,
+		LogLevel:   logl,
 	}
 }

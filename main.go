@@ -3,6 +3,7 @@ package main
 import (
 	"excel/collect"
 	"excel/config"
+	"excel/log"
 	"fmt"
 	"os"
 )
@@ -14,10 +15,11 @@ func main() {
 
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("出现问题！！！请到下面链接反馈问题")
-		fmt.Println("https://docs.google.com/spreadsheets/d/1GkcPa0WjVt2UBVnRNQ-1SO49vYsR0CQgk3qtA-VxE-Y/edit#gid=0")
+		fmt.Println("运行过程中出现问题！！！")
+		log.Error(err)
 	} else {
-		fmt.Println("没有问题")
+		fmt.Println("运行过程中没有问题")
+		log.Info("no problem cause before exit")
 	}
 	fmt.Println("请按回车退出")
 	b := make([]byte, 1)
